@@ -118,6 +118,31 @@ def _redact_request(req: dict) -> dict:
     return redacted
 
 
+def _normalize_tools_for_compat(tools: Any) -> Any:
+    """
+    Ensure each tool dict has top-level 'name' and 'type' when possible by
+    mirroring from nested function schema for OpenAI-compatible validators.
+    Keeps original structure otherwise.
+    """
+    if not isinstance(tools, list):
+        return tools
+    normalized: list[Any] = []
+    for t in tools:
+        if not isinstance(t, dict):
+            normalized.append(t)
+            continue
+        tt = dict(t)
+        fn = tt.get("function")
+        if isinstance(fn, dict):
+            fn_name = fn.get("name")
+            if fn_name and "name" not in tt:
+                tt["name"] = fn_name
+            if "type" not in tt:
+                tt["type"] = "function"
+        normalized.append(tt)
+    return normalized
+
+
 def install_litellm_recorder(config: Optional[RecorderConfig] = None) -> None:
     """
     Monkeypatch litellm.completion to log request/response jsonl lines.
@@ -195,7 +220,9 @@ def install_litellm_recorder(config: Optional[RecorderConfig] = None) -> None:
         if extra_params:
             req["extra_params"] = extra_params
 
-        # Call real client
+        # Call real client (normalize tools for stricter backends)
+        if tools is not None:
+            kwargs["tools"] = _normalize_tools_for_compat(tools)
         resp = _ORIGINAL_COMPLETION(*args, **kwargs)
 
         # Parse response summary
