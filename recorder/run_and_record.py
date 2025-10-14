@@ -5,6 +5,8 @@ import sys
 import platform
 import hashlib
 import shutil
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +22,8 @@ from recorder.llm_recorder import (
     set_session_context,
 )
 from tau2.data_model.message import AssistantMessage, Message, SystemMessage, ToolMessage, UserMessage
+from tau2.data_model.simulation import SimulationRun
+from tau2.data_model.tasks import Task
 from tau2.run import EvaluationType, get_tasks, run_task
 from tau2.utils.utils import get_commit_hash
 
@@ -101,6 +105,7 @@ class Args:
     llm_retries: Optional[int]
     reasoning_effort: Optional[str]
     max_steps: int
+    max_workers: int
 
 
 def parse_args() -> Args:
@@ -122,6 +127,7 @@ def parse_args() -> Args:
         help="Hint to the model to adjust reasoning effort (passed through to LiteLLM)",
     )
     p.add_argument("--max-steps", type=int, default=200, help="Maximum number of steps per simulation")
+    p.add_argument("--max-workers", type=int, default=6, help="Maximum number of parallel workers")
     ns = p.parse_args()
     return Args(
         domains=[d.strip() for d in ns.domains.split(",") if d.strip()],
@@ -135,6 +141,7 @@ def parse_args() -> Args:
         llm_retries=ns.llm_retries,
         reasoning_effort=ns.reasoning_effort,
         max_steps=ns.max_steps,
+        max_workers=ns.max_workers,
     )
 
 
@@ -161,6 +168,7 @@ def _write_manifest(run_dir: Path, run_id: str, args: Args, domain: str, tasks: 
         "temperature": args.temperature,
         "reasoning_effort": args.reasoning_effort,
         "num_trials": args.num_trials,
+        "max_workers": args.max_workers,
         "seed_base": 0 if args.seed is None else int(args.seed),
         "python": platform.python_version(),
         "platform": platform.platform(),
@@ -176,6 +184,141 @@ def _write_manifest(run_dir: Path, run_id: str, args: Args, domain: str, tasks: 
             pass
 
 
+def _run_single_trial(
+    domain: str,
+    task: Task,
+    trial_index: int,
+    trial_seed: int,
+    run_id: str,
+    args: Args,
+    dialogs_path: Path,
+    dialogs_write_lock: threading.Lock,
+) -> Optional[SimulationRun]:
+    """Run a single task/trial combination and record the dialog."""
+    session_id = f"{run_id}:{domain}:{task.id}:{trial_index}"
+    set_session_context(session_id=session_id, domain=domain, task_id=task.id)
+    
+    try:
+        simulation = run_task(
+            domain=domain,
+            task=task,
+            agent="llm_agent",
+            user="user_simulator",
+            llm_agent=args.model,
+            llm_args_agent={
+                "temperature": args.temperature,
+                **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
+                **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
+            },
+            llm_user=args.model,
+            llm_args_user={
+                "temperature": args.temperature,
+                **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
+                **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
+            },
+            max_steps=args.max_steps,
+            max_errors=10,
+            evaluation_type=EvaluationType.ALL,
+            seed=trial_seed,
+        )
+        infra_failure = False
+        infra_failure_reason = None
+    except Exception as e:
+        logger.error(f"Failed to run {session_id}: {e}")
+        # Mark as infrastructure failure - should be excluded from RFT
+        infra_failure = True
+        infra_failure_reason = str(e)
+        simulation = None
+    finally:
+        clear_session_context()
+    
+    # If infrastructure failure, record a minimal entry
+    if infra_failure:
+        dialog_record = {
+            "session_id": session_id,
+            "domain": domain,
+            "task_id": task.id,
+            "messages": [],
+            "metrics": {
+                "success": None,
+                "score": None,
+                "infra_failure": True,
+                "infra_failure_reason": infra_failure_reason,
+            },
+        }
+        with dialogs_write_lock:
+            with open(dialogs_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(dialog_record, ensure_ascii=False) + "\n")
+        return None
+
+    # Aggregate dialog for this trial instance
+    include_tools = os.environ.get("RECORDER_INCLUDE_TOOLS", "0") == "1"
+    normalized_messages = _normalize_dialog_messages(
+        session_id=session_id,
+        messages=simulation.messages,
+        include_tools=include_tools,
+    )
+    
+    # Enhanced metrics for SFT/RFT filtering and analysis
+    metrics = None
+    if simulation.reward_info:
+        try:
+            metrics = {
+                # Basic success indicators
+                "success": bool(simulation.reward_info.reward and simulation.reward_info.reward > 0),
+                "score": float(simulation.reward_info.reward),
+                
+                # Component-level breakdown (critical for RFT filtering)
+                "reward_breakdown": simulation.reward_info.reward_breakdown,
+                "reward_basis": simulation.reward_info.reward_basis,
+                
+                # Trajectory characteristics
+                "termination_reason": simulation.termination_reason,
+                "num_steps": len(simulation.messages),
+                
+                # Detailed component checks
+                "db_success": simulation.reward_info.db_check.db_match if simulation.reward_info.db_check else None,
+                "num_action_checks": len(simulation.reward_info.action_checks) if simulation.reward_info.action_checks else 0,
+                "action_success_rate": (
+                    sum(1 for ac in simulation.reward_info.action_checks if ac.action_match) / len(simulation.reward_info.action_checks)
+                    if simulation.reward_info.action_checks else None
+                ),
+                "num_communicate_checks": len(simulation.reward_info.communicate_checks) if simulation.reward_info.communicate_checks else 0,
+                "communicate_success_rate": (
+                    sum(1 for cc in simulation.reward_info.communicate_checks if cc.communicated) / len(simulation.reward_info.communicate_checks)
+                    if simulation.reward_info.communicate_checks else None
+                ),
+                
+                # Infrastructure failure indicator (False for successful runs)
+                "infra_failure": False,
+            }
+        except Exception as e:
+            # Fallback to basic metrics if detailed parsing fails
+            logger.warning(f"Failed to extract detailed metrics for {session_id}: {e}")
+            metrics = {
+                "success": bool(simulation.reward_info.reward and simulation.reward_info.reward > 0),
+                "score": float(simulation.reward_info.reward),
+                "infra_failure": False,
+            }
+    else:
+        metrics = {"success": None, "score": None, "infra_failure": False}
+
+    dialog_record = {
+        "session_id": session_id,
+        "domain": domain,
+        "task_id": task.id,
+        "messages": normalized_messages,
+        "metrics": metrics,
+    }
+    
+    # Thread-safe write to dialogs file
+    with dialogs_write_lock:
+        with open(dialogs_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(dialog_record, ensure_ascii=False) + "\n")
+
+    return simulation
+
+
 def main() -> None:
     args = parse_args()
     run_id = args.run_id or _now_id()
@@ -183,6 +326,17 @@ def main() -> None:
     _ensure_dir(run_dir)
     payloads_path = run_dir / "tau2_payloads.jsonl"
     dialogs_path = run_dir / "tau2_dialogs.jsonl"
+    
+    # Add file logging for errors and warnings
+    error_log = run_dir / "errors.log"
+    logger.add(
+        error_log,
+        level="WARNING",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+        rotation=None,
+        retention=None,
+    )
+    logger.info(f"Error logging enabled to: {error_log}")
 
     # Install recorder (monkeypatch LiteLLM)
     install_litellm_recorder(
@@ -195,113 +349,62 @@ def main() -> None:
     )
 
     print(
-        f"[Recorder] run_id={run_id} domains={args.domains} model={args.model} num_trials={args.num_trials} outdir={run_dir}"
+        f"[Recorder] run_id={run_id} domains={args.domains} model={args.model} num_trials={args.num_trials} max_workers={args.max_workers} outdir={run_dir}"
     )
+    print(f"[Recorder] Error log: {error_log}")
 
-    # Force sequential execution to simplify session context handling
-    # We'll call run_task directly per task/trial with EvaluationType.ALL
+    # Parallel execution with ThreadPoolExecutor
     base_seed = 0 if args.seed is None else int(args.seed)
+    dialogs_write_lock = threading.Lock()
+    
     for domain in args.domains:
         # Load all tasks for this domain
         tasks = get_tasks(task_set_name=domain)
         if not tasks:
             print(f"[Recorder][warn] No tasks for domain={domain}")
             continue
+        
         # Write manifest & snapshot config once per domain
         _write_manifest(run_dir, run_id, args, domain, tasks)
+        
+        # Build work items for parallel execution
+        work_items = []
         for trial_index in range(args.num_trials):
             trial_seed = base_seed + trial_index
-            for task_index, task in enumerate(tasks):
-                session_id = f"{run_id}:{domain}:{task.id}:{trial_index}"
-                set_session_context(session_id=session_id, domain=domain, task_id=task.id)
-                try:
-                    simulation = run_task(
-                        domain=domain,
-                        task=task,
-                        agent="llm_agent",
-                        user="user_simulator",
-                        llm_agent=args.model,
-                        llm_args_agent={
-                            "temperature": args.temperature,
-                            **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
-                            **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
-                        },
-                        llm_user=args.model,
-                        llm_args_user={
-                            "temperature": args.temperature,
-                            **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
-                            **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
-                        },
-                        max_steps=args.max_steps,
-                        max_errors=10,
-                        evaluation_type=EvaluationType.ALL,
-                        seed=trial_seed,
-                    )
-                finally:
-                    clear_session_context()
-
-                # Aggregate dialog for this trial instance
-                include_tools = os.environ.get("RECORDER_INCLUDE_TOOLS", "0") == "1"
-                normalized_messages = _normalize_dialog_messages(
-                    session_id=session_id,
-                    messages=simulation.messages,
-                    include_tools=include_tools,
-                )
-                
-                # Enhanced metrics for SFT/RFT filtering and analysis
-                metrics = None
-                if simulation.reward_info:
-                    try:
-                        metrics = {
-                            # Basic success indicators
-                            "success": bool(simulation.reward_info.reward and simulation.reward_info.reward > 0),
-                            "score": float(simulation.reward_info.reward),
-                            
-                            # Component-level breakdown (critical for RFT filtering)
-                            "reward_breakdown": simulation.reward_info.reward_breakdown,
-                            "reward_basis": simulation.reward_info.reward_basis,
-                            
-                            # Trajectory characteristics
-                            "termination_reason": simulation.termination_reason,
-                            "num_steps": len(simulation.messages),
-                            
-                            # Detailed component checks
-                            "db_success": simulation.reward_info.db_check.met if simulation.reward_info.db_check else None,
-                            "num_action_checks": len(simulation.reward_info.action_checks) if simulation.reward_info.action_checks else 0,
-                            "action_success_rate": (
-                                sum(1 for ac in simulation.reward_info.action_checks if ac.action_match) / len(simulation.reward_info.action_checks)
-                                if simulation.reward_info.action_checks else None
-                            ),
-                            "num_communicate_checks": len(simulation.reward_info.communicate_checks) if simulation.reward_info.communicate_checks else 0,
-                            "communicate_success_rate": (
-                                sum(1 for cc in simulation.reward_info.communicate_checks if cc.communicated) / len(simulation.reward_info.communicate_checks)
-                                if simulation.reward_info.communicate_checks else None
-                            ),
-                        }
-                    except Exception as e:
-                        # Fallback to basic metrics if detailed parsing fails
-                        logger.warning(f"Failed to extract detailed metrics for {session_id}: {e}")
-                        metrics = {
-                            "success": bool(simulation.reward_info.reward and simulation.reward_info.reward > 0),
-                            "score": float(simulation.reward_info.reward),
-                        }
-                else:
-                    metrics = {"success": None, "score": None}
-
-                dialog_record = {
-                    "session_id": session_id,
-                    "domain": domain,
-                    "task_id": task.id,
-                    "messages": normalized_messages,
-                    "metrics": metrics,
-                }
-                with open(dialogs_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(dialog_record, ensure_ascii=False) + "\n")
-
-            # Trial-level sanity print
-            has_system = get_first_system_for_session(session_id) is not None
+            for task in tasks:
+                work_items.append((
+                    domain,
+                    task,
+                    trial_index,
+                    trial_seed,
+                    run_id,
+                    args,
+                    dialogs_path,
+                    dialogs_write_lock,
+                ))
+        
+        print(f"[Recorder] Starting {len(work_items)} simulations for domain={domain} with {args.max_workers} workers...")
+        
+        # Run in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+            simulations = list(executor.map(lambda x: _run_single_trial(*x), work_items))
+        
+        # Filter out failed simulations and report summary
+        successful_sims = [s for s in simulations if s is not None]
+        failed_count = len(simulations) - len(successful_sims)
+        
+        print(
+            f"[Recorder] Completed domain={domain}: {len(successful_sims)}/{len(simulations)} successful "
+            f"({failed_count} failed)"
+        )
+        
+        # Sample sanity print from a successful simulation
+        if successful_sims:
+            last_sim = successful_sims[-1]
+            last_session_id = f"{run_id}:{domain}:{last_sim.task_id}:{args.num_trials-1}"
+            has_system = get_first_system_for_session(last_session_id) is not None
             print(
-                f"[Recorder] session_id={session_id} turns={len(simulation.messages)} has_system={has_system}"
+                f"[Recorder] Sample simulation: turns={len(last_sim.messages)} has_system={has_system}"
             )
 
     # Final sanity print (counts)
