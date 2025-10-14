@@ -19,7 +19,7 @@ from recorder.llm_recorder import (
     install_litellm_recorder,
     set_session_context,
 )
-from tau2.data_model.message import AssistantMessage, Message, SystemMessage, UserMessage
+from tau2.data_model.message import AssistantMessage, Message, SystemMessage, ToolMessage, UserMessage
 from tau2.run import EvaluationType, get_tasks, run_task
 from tau2.utils.utils import get_commit_hash
 
@@ -37,6 +37,10 @@ def _normalize_dialog_messages(
     messages: list[Message],
     include_tools: bool,
 ) -> list[dict]:
+    """
+    Normalize dialog messages to OpenAI chat completion format.
+    Preserves native tool_calls and tool result messages for SFT/RFT fine-tuning.
+    """
     normalized: list[dict] = []
     # Prepend system if we captured it in payloads
     sys_prompt = get_first_system_for_session(session_id)
@@ -47,25 +51,40 @@ def _normalize_dialog_messages(
         if isinstance(msg, UserMessage):
             if msg.content is not None:
                 normalized.append({"role": "user", "content": msg.content})
+                
         elif isinstance(msg, AssistantMessage):
-            # Minimal default: omit tool transcripts from dialogs.jsonl
-            content = msg.content
-            if include_tools and msg.is_tool_call():
-                # Inline a compact note
-                try:
-                    tool_notes = []
-                    for tc in msg.tool_calls or []:
-                        tool_notes.append(f"[tool_call] {tc.name}: {json.dumps(tc.arguments, ensure_ascii=False)}")
-                    note = "\n".join(tool_notes)
-                    content = (content or "").strip()
-                    content = f"{content}\n{note}" if content else note
-                except Exception:
-                    pass
-            if content is not None and content != "":
-                normalized.append({"role": "assistant", "content": content})
-        else:
-            # ToolMessage or others are omitted from FT dialog
-            continue
+            entry = {"role": "assistant"}
+            
+            # Preserve content if present
+            if msg.content:
+                entry["content"] = msg.content
+            
+            # CRITICAL: Preserve native tool_calls structure for SFT
+            if msg.is_tool_call() and msg.tool_calls:
+                entry["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments, ensure_ascii=False)
+                        }
+                    }
+                    for tc in msg.tool_calls
+                ]
+            
+            # Only include if there's actual content or tool calls
+            if "content" in entry or "tool_calls" in entry:
+                normalized.append(entry)
+                
+        elif isinstance(msg, ToolMessage):
+            # CRITICAL: Keep tool results for SFT!
+            normalized.append({
+                "role": "tool",
+                "tool_call_id": msg.id,
+                "content": msg.content if msg.content else "",
+            })
+    
     return normalized
 
 
@@ -225,13 +244,46 @@ def main() -> None:
                     messages=simulation.messages,
                     include_tools=include_tools,
                 )
-                reward = simulation.reward_info.reward if simulation.reward_info else None
+                
+                # Enhanced metrics for SFT/RFT filtering and analysis
                 metrics = None
-                if reward is not None:
+                if simulation.reward_info:
                     try:
-                        metrics = {"success": bool(reward and reward > 0), "score": float(reward)}
-                    except Exception:
-                        metrics = {"success": None, "score": reward}
+                        metrics = {
+                            # Basic success indicators
+                            "success": bool(simulation.reward_info.reward and simulation.reward_info.reward > 0),
+                            "score": float(simulation.reward_info.reward),
+                            
+                            # Component-level breakdown (critical for RFT filtering)
+                            "reward_breakdown": simulation.reward_info.reward_breakdown,
+                            "reward_basis": simulation.reward_info.reward_basis,
+                            
+                            # Trajectory characteristics
+                            "termination_reason": simulation.termination_reason,
+                            "num_steps": len(simulation.messages),
+                            
+                            # Detailed component checks
+                            "db_success": simulation.reward_info.db_check.met if simulation.reward_info.db_check else None,
+                            "num_action_checks": len(simulation.reward_info.action_checks) if simulation.reward_info.action_checks else 0,
+                            "action_success_rate": (
+                                sum(1 for ac in simulation.reward_info.action_checks if ac.action_match) / len(simulation.reward_info.action_checks)
+                                if simulation.reward_info.action_checks else None
+                            ),
+                            "num_communicate_checks": len(simulation.reward_info.communicate_checks) if simulation.reward_info.communicate_checks else 0,
+                            "communicate_success_rate": (
+                                sum(1 for cc in simulation.reward_info.communicate_checks if cc.communicated) / len(simulation.reward_info.communicate_checks)
+                                if simulation.reward_info.communicate_checks else None
+                            ),
+                        }
+                    except Exception as e:
+                        # Fallback to basic metrics if detailed parsing fails
+                        logger.warning(f"Failed to extract detailed metrics for {session_id}: {e}")
+                        metrics = {
+                            "success": bool(simulation.reward_info.reward and simulation.reward_info.reward > 0),
+                            "score": float(simulation.reward_info.reward),
+                        }
+                else:
+                    metrics = {"success": None, "score": None}
 
                 dialog_record = {
                     "session_id": session_id,
