@@ -1,0 +1,110 @@
+"""Shared argument parsing and configuration for tau2 recording tools."""
+
+import argparse
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+
+@dataclass
+class RecorderArgs:
+    """Shared arguments for recording and retry operations."""
+    domains: list[str]
+    num_trials: int
+    model: str
+    temperature: float
+    user_model: str
+    user_temperature: float
+    outdir: Path
+    seed: Optional[int]
+    debug: bool
+    run_id: Optional[str]
+    llm_retries: Optional[int]
+    reasoning_effort: Optional[str]
+    max_steps: int
+    max_workers: int
+    infra_retries: int
+
+
+def add_model_args(parser: argparse.ArgumentParser, allow_user_override: bool = True):
+    """Add model configuration arguments to parser.
+    
+    Args:
+        parser: ArgumentParser to add arguments to
+        allow_user_override: If True, adds --user-model and --user-temperature args
+    """
+    parser.add_argument("--model", type=str, default="gpt-4.1", 
+                       help="Model for the agent")
+    parser.add_argument("--temperature", type=float, default=0.2, 
+                       help="Temperature for the agent")
+    
+    if allow_user_override:
+        parser.add_argument("--user-model", type=str, default=None,
+                           help="Model for the user simulator (default: gpt-4.1, or from manifest for retries)")
+        parser.add_argument("--user-temperature", type=float, default=None,
+                           help="Temperature for the user simulator (default: 0.0, or from manifest for retries)")
+
+
+def add_execution_args(parser: argparse.ArgumentParser):
+    """Add execution configuration arguments to parser."""
+    parser.add_argument("--max-steps", type=int, default=200, 
+                       help="Maximum number of steps per simulation")
+    parser.add_argument("--max-workers", type=int, default=6, 
+                       help="Maximum number of parallel workers")
+    parser.add_argument("--infra-retries", type=int, default=2, 
+                       help="Retries for infrastructure failures")
+    parser.add_argument("--llm-retries", type=int, default=None, 
+                       help="Override LiteLLM per-call retries")
+    parser.add_argument(
+        "--reasoning-effort",
+        type=str,
+        choices=["low", "medium", "high"],
+        default=None,
+        help="Hint to the model to adjust reasoning effort (passed through to LiteLLM)",
+    )
+
+
+def merge_args_with_manifest(
+    manifest: dict,
+    user_model_override: Optional[str] = None,
+    user_temperature_override: Optional[float] = None,
+    max_workers: Optional[int] = None,
+    infra_retries: Optional[int] = None,
+) -> RecorderArgs:
+    """Create RecorderArgs by merging manifest data with CLI overrides.
+    
+    Used by retry_failures to reconstruct configuration from manifest while
+    allowing selective overrides (especially for user model).
+    
+    Args:
+        manifest: Run manifest dict loaded from run_manifest.json
+        user_model_override: Override user model (if None, uses manifest value)
+        user_temperature_override: Override user temperature (if None, uses manifest value)
+        max_workers: Override max_workers (if None, uses manifest value)
+        infra_retries: Override infra_retries (if None, uses manifest value)
+    
+    Returns:
+        RecorderArgs with merged configuration
+    """
+    return RecorderArgs(
+        domains=manifest["domains"],
+        num_trials=manifest["num_trials"],
+        model=manifest["model"],
+        temperature=manifest["temperature"],
+        user_model=user_model_override or manifest.get("user_model", "gpt-4.1"),
+        user_temperature=(
+            user_temperature_override 
+            if user_temperature_override is not None 
+            else manifest.get("user_temperature", 0.0)
+        ),
+        outdir=Path("./recordings"),  # Will be overridden by caller
+        seed=manifest.get("seed_base"),
+        debug=False,
+        run_id=manifest["run_id"],
+        llm_retries=None,
+        reasoning_effort=manifest.get("reasoning_effort"),
+        max_steps=manifest.get("max_steps", 200),
+        max_workers=max_workers or manifest.get("max_workers", 6),
+        infra_retries=infra_retries or manifest.get("infra_retries", 2),
+    )
+

@@ -15,6 +15,7 @@ from typing import Optional
 
 from loguru import logger
 
+from recorder.common_args import RecorderArgs as Args, add_model_args, add_execution_args
 from recorder.llm_recorder import (
     RecorderConfig,
     clear_session_context,
@@ -38,50 +39,30 @@ def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-@dataclass
-class Args:
-    domains: list[str]
-    num_trials: int
-    model: str
-    temperature: float
-    outdir: Path
-    seed: Optional[int]
-    debug: bool
-    run_id: Optional[str]
-    llm_retries: Optional[int]
-    reasoning_effort: Optional[str]
-    max_steps: int
-    max_workers: int
-    infra_retries: int
-
-
 def parse_args() -> Args:
     p = argparse.ArgumentParser(description="Run τ² with payload recording and dialog aggregation")
     p.add_argument("--domains", type=str, required=True, help="Comma-separated domain names (e.g., airline,mock)")
     p.add_argument("--num-trials", type=int, default=1)
-    p.add_argument("--model", type=str, default="gpt-4.1")
-    p.add_argument("--temperature", type=float, default=0.2)
+    
+    # Add shared model arguments
+    add_model_args(p, allow_user_override=True)
+    
     p.add_argument("--outdir", type=str, default=os.environ.get("RECORDER_OUTDIR", "./recordings"))
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--debug", action="store_true")
     p.add_argument("--run-id", type=str, default=None)
-    p.add_argument("--llm-retries", type=int, default=None, help="Override LiteLLM per-call retries")
-    p.add_argument(
-        "--reasoning-effort",
-        type=str,
-        choices=["low", "medium", "high"],
-        default=None,
-        help="Hint to the model to adjust reasoning effort (passed through to LiteLLM)",
-    )
-    p.add_argument("--max-steps", type=int, default=200, help="Maximum number of steps per simulation")
-    p.add_argument("--max-workers", type=int, default=6, help="Maximum number of parallel workers")
-    p.add_argument("--infra-retries", type=int, default=2, help="Retries for infrastructure failures")
+    
+    # Add shared execution arguments
+    add_execution_args(p)
+    
     ns = p.parse_args()
     return Args(
         domains=[d.strip() for d in ns.domains.split(",") if d.strip()],
         num_trials=ns.num_trials,
         model=ns.model,
         temperature=ns.temperature,
+        user_model=ns.user_model or "gpt-4.1",  # Apply default if not provided
+        user_temperature=ns.user_temperature if ns.user_temperature is not None else 0.0,
         outdir=Path(ns.outdir),
         seed=ns.seed,
         debug=ns.debug,
@@ -115,6 +96,8 @@ def _write_manifest(run_dir: Path, run_id: str, args: Args, domain: str, tasks: 
         "task_ids": [t.id for t in tasks],
         "model": args.model,
         "temperature": args.temperature,
+        "user_model": args.user_model,
+        "user_temperature": args.user_temperature,
         "reasoning_effort": args.reasoning_effort,
         "num_trials": args.num_trials,
         "max_workers": args.max_workers,
@@ -161,10 +144,9 @@ def _run_single_trial(
                     **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
                     **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
                 },
-                llm_user=args.model,
+                llm_user=args.user_model,
                 llm_args_user={
-                    "temperature": args.temperature,
-                    **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
+                    "temperature": args.user_temperature,
                     **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
                 },
                 max_steps=args.max_steps,
