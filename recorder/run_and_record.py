@@ -6,7 +6,7 @@ import platform
 import hashlib
 import shutil
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -385,9 +385,24 @@ def main() -> None:
         
         print(f"[Recorder] Starting {len(work_items)} simulations for domain={domain} with {args.max_workers} workers...")
         
-        # Run in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-            simulations = list(executor.map(lambda x: _run_single_trial(*x), work_items))
+        # Run in parallel using ThreadPoolExecutor with proper KeyboardInterrupt handling
+        simulations = []
+        try:
+            with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+                # Submit all tasks and get futures
+                futures = [executor.submit(_run_single_trial, *item) for item in work_items]
+                
+                # Collect results as they complete (allows Ctrl-C to work)
+                for future in as_completed(futures):
+                    try:
+                        simulations.append(future.result())
+                    except Exception as e:
+                        # Individual task failures are already logged, just skip
+                        simulations.append(None)
+        except KeyboardInterrupt:
+            print("\n[Recorder] Interrupted by user (Ctrl-C). Cleaning up...")
+            # Note: ThreadPoolExecutor.__exit__ will wait for running tasks to complete
+            raise
         
         # Filter out failed simulations and report summary
         successful_sims = [s for s in simulations if s is not None]
