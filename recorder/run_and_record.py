@@ -25,6 +25,7 @@ from tau2.data_model.message import AssistantMessage, Message, SystemMessage, To
 from tau2.data_model.simulation import SimulationRun
 from tau2.data_model.tasks import Task
 from tau2.run import EvaluationType, get_tasks, run_task
+from tau2.utils.llm_utils import to_litellm_messages
 from tau2.utils.utils import get_commit_hash
 
 
@@ -34,62 +35,6 @@ def _now_id() -> str:
 
 def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
-
-
-def _normalize_dialog_messages(
-    session_id: str,
-    messages: list[Message],
-    include_tools: bool,
-) -> list[dict]:
-    """
-    Normalize dialog messages to OpenAI chat completion format.
-    Preserves native tool_calls and tool result messages for SFT/RFT fine-tuning.
-    """
-    normalized: list[dict] = []
-    # Prepend system if we captured it in payloads
-    sys_prompt = get_first_system_for_session(session_id)
-    if sys_prompt:
-        normalized.append({"role": "system", "content": sys_prompt})
-
-    for msg in messages:
-        if isinstance(msg, UserMessage):
-            if msg.content is not None:
-                normalized.append({"role": "user", "content": msg.content})
-                
-        elif isinstance(msg, AssistantMessage):
-            entry = {"role": "assistant"}
-            
-            # Preserve content if present
-            if msg.content:
-                entry["content"] = msg.content
-            
-            # CRITICAL: Preserve native tool_calls structure for SFT
-            if msg.is_tool_call() and msg.tool_calls:
-                entry["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": json.dumps(tc.arguments, ensure_ascii=False)
-                        }
-                    }
-                    for tc in msg.tool_calls
-                ]
-            
-            # Only include if there's actual content or tool calls
-            if "content" in entry or "tool_calls" in entry:
-                normalized.append(entry)
-                
-        elif isinstance(msg, ToolMessage):
-            # CRITICAL: Keep tool results for SFT!
-            normalized.append({
-                "role": "tool",
-                "tool_call_id": msg.id,
-                "content": msg.content if msg.content else "",
-            })
-    
-    return normalized
 
 
 @dataclass
@@ -251,13 +196,9 @@ def _run_single_trial(
                 f.write(json.dumps(dialog_record, ensure_ascii=False) + "\n")
         return None
 
-    # Aggregate dialog for this trial instance
-    include_tools = os.environ.get("RECORDER_INCLUDE_TOOLS", "0") == "1"
-    normalized_messages = _normalize_dialog_messages(
-        session_id=session_id,
-        messages=simulation.messages,
-        include_tools=include_tools,
-    )
+    # Convert messages to OpenAI format for recording
+    # Uses tau2's standard conversion (works with all providers)
+    normalized_messages = to_litellm_messages(simulation.messages)
     
     # Enhanced metrics for SFT/RFT filtering and analysis
     metrics = None

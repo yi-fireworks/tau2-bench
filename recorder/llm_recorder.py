@@ -123,6 +123,11 @@ def _normalize_tools_for_compat(tools: Any) -> Any:
     Ensure each tool dict has top-level 'name' and 'type' when possible by
     mirroring from nested function schema for OpenAI-compatible validators.
     Keeps original structure otherwise.
+    
+    NOTE: This normalization adds a top-level 'name' field that some providers
+    (e.g., Fireworks) reject due to strict validation. Skip this function for
+    such providers. Most providers (GPT, Claude, Gemini) are lenient and accept
+    both normalized and non-normalized formats.
     """
     if not isinstance(tools, list):
         return tools
@@ -222,7 +227,11 @@ def install_litellm_recorder(config: Optional[RecorderConfig] = None) -> None:
 
         # Call real client (normalize tools for stricter backends)
         if tools is not None:
-            kwargs["tools"] = _normalize_tools_for_compat(tools)
+            # Fireworks rejects extra 'name' field - skip normalization for them
+            if model and "fireworks" in str(model).lower():
+                kwargs["tools"] = tools  # Use as-is for Fireworks
+            else:
+                kwargs["tools"] = _normalize_tools_for_compat(tools)
         resp = _ORIGINAL_COMPLETION(*args, **kwargs)
 
         # Parse response summary
