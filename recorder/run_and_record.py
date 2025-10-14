@@ -79,6 +79,7 @@ class Args:
     seed: Optional[int]
     debug: bool
     run_id: Optional[str]
+    llm_retries: Optional[int]
 
 
 def parse_args() -> Args:
@@ -91,6 +92,7 @@ def parse_args() -> Args:
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--debug", action="store_true")
     p.add_argument("--run-id", type=str, default=None)
+    p.add_argument("--llm-retries", type=int, default=None, help="Override LiteLLM per-call retries")
     ns = p.parse_args()
     return Args(
         domains=[d.strip() for d in ns.domains.split(",") if d.strip()],
@@ -101,6 +103,7 @@ def parse_args() -> Args:
         seed=ns.seed,
         debug=ns.debug,
         run_id=ns.run_id,
+        llm_retries=ns.llm_retries,
     )
 
 
@@ -186,9 +189,15 @@ def main() -> None:
                         agent="llm_agent",
                         user="user_simulator",
                         llm_agent=args.model,
-                        llm_args_agent={"temperature": args.temperature},
+                        llm_args_agent={
+                            "temperature": args.temperature,
+                            **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
+                        },
                         llm_user=args.model,
-                        llm_args_user={"temperature": args.temperature},
+                        llm_args_user={
+                            "temperature": args.temperature,
+                            **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
+                        },
                         max_steps=100,
                         max_errors=10,
                         evaluation_type=EvaluationType.ALL,

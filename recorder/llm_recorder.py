@@ -251,5 +251,12 @@ def install_litellm_recorder(config: Optional[RecorderConfig] = None) -> None:
         return resp
 
     litellm.completion = _wrapper  # type: ignore[assignment]
+    # Ensure modules that imported 'completion' by name also use the wrapper
+    try:  # best-effort, avoid hard failures
+        import tau2.utils.llm_utils as _llm_utils  # type: ignore
+        if getattr(_llm_utils, "completion", None) is not _wrapper:
+            _llm_utils.completion = _wrapper  # type: ignore[assignment]
+    except Exception:
+        pass
 
 
