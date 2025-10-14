@@ -100,6 +100,7 @@ class Args:
     run_id: Optional[str]
     llm_retries: Optional[int]
     reasoning_effort: Optional[str]
+    max_steps: int
 
 
 def parse_args() -> Args:
@@ -120,6 +121,7 @@ def parse_args() -> Args:
         default=None,
         help="Hint to the model to adjust reasoning effort (passed through to LiteLLM)",
     )
+    p.add_argument("--max-steps", type=int, default=200, help="Maximum number of steps per simulation")
     ns = p.parse_args()
     return Args(
         domains=[d.strip() for d in ns.domains.split(",") if d.strip()],
@@ -132,6 +134,7 @@ def parse_args() -> Args:
         run_id=ns.run_id,
         llm_retries=ns.llm_retries,
         reasoning_effort=ns.reasoning_effort,
+        max_steps=ns.max_steps,
     )
 
 
@@ -229,7 +232,7 @@ def main() -> None:
                             **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
                             **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
                         },
-                        max_steps=100,
+                        max_steps=args.max_steps,
                         max_errors=10,
                         evaluation_type=EvaluationType.ALL,
                         seed=trial_seed,
