@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import platform
 import hashlib
 import shutil
@@ -51,6 +52,7 @@ class Args:
     reasoning_effort: Optional[str]
     max_steps: int
     max_workers: int
+    infra_retries: int
 
 
 def parse_args() -> Args:
@@ -73,6 +75,7 @@ def parse_args() -> Args:
     )
     p.add_argument("--max-steps", type=int, default=200, help="Maximum number of steps per simulation")
     p.add_argument("--max-workers", type=int, default=6, help="Maximum number of parallel workers")
+    p.add_argument("--infra-retries", type=int, default=2, help="Retries for infrastructure failures")
     ns = p.parse_args()
     return Args(
         domains=[d.strip() for d in ns.domains.split(",") if d.strip()],
@@ -87,6 +90,7 @@ def parse_args() -> Args:
         reasoning_effort=ns.reasoning_effort,
         max_steps=ns.max_steps,
         max_workers=ns.max_workers,
+        infra_retries=ns.infra_retries,
     )
 
 
@@ -141,41 +145,49 @@ def _run_single_trial(
 ) -> Optional[SimulationRun]:
     """Run a single task/trial combination and record the dialog."""
     session_id = f"{run_id}:{domain}:{task.id}:{trial_index}"
-    set_session_context(session_id=session_id, domain=domain, task_id=task.id)
     
-    try:
-        simulation = run_task(
-            domain=domain,
-            task=task,
-            agent="llm_agent",
-            user="user_simulator",
-            llm_agent=args.model,
-            llm_args_agent={
-                "temperature": args.temperature,
-                **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
-                **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
-            },
-            llm_user=args.model,
-            llm_args_user={
-                "temperature": args.temperature,
-                **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
-                **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
-            },
-            max_steps=args.max_steps,
-            max_errors=10,
-            evaluation_type=EvaluationType.ALL,
-            seed=trial_seed,
-        )
-        infra_failure = False
-        infra_failure_reason = None
-    except Exception as e:
-        logger.error(f"Failed to run {session_id}: {e}")
-        # Mark as infrastructure failure - should be excluded from RFT
-        infra_failure = True
-        infra_failure_reason = str(e)
-        simulation = None
-    finally:
-        clear_session_context()
+    for attempt in range(args.infra_retries + 1):
+        set_session_context(session_id=session_id, domain=domain, task_id=task.id)
+        
+        try:
+            simulation = run_task(
+                domain=domain,
+                task=task,
+                agent="llm_agent",
+                user="user_simulator",
+                llm_agent=args.model,
+                llm_args_agent={
+                    "temperature": args.temperature,
+                    **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
+                    **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
+                },
+                llm_user=args.model,
+                llm_args_user={
+                    "temperature": args.temperature,
+                    **({"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}),
+                    **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
+                },
+                max_steps=args.max_steps,
+                max_errors=10,
+                evaluation_type=EvaluationType.ALL,
+                seed=trial_seed,
+            )
+            infra_failure = False
+            infra_failure_reason = None
+            clear_session_context()
+            break  # Success - exit retry loop
+        except Exception as e:
+            clear_session_context()
+            if attempt < args.infra_retries:
+                wait_time = 2 ** attempt
+                logger.warning(f"Retry {attempt + 1}/{args.infra_retries} for {session_id} after {wait_time}s: {e}")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"Failed to run {session_id} after {args.infra_retries + 1} attempts: {e}")
+                # Mark as infrastructure failure - should be excluded from RFT
+                infra_failure = True
+                infra_failure_reason = str(e)
+                simulation = None
     
     # If infrastructure failure, record a minimal entry
     if infra_failure:
