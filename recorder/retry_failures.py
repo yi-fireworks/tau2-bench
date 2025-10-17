@@ -11,8 +11,14 @@ Usage:
 Example:
     python -m recorder.retry_failures recordings/run_20251014-213614_airline_gemini-2.5-flash_temp1.0_tr4/
     python -m recorder.retry_failures recordings/run_20251014-213614_airline_gemini-2.5-flash_temp1.0_tr4/ --max-retries 3 --max-workers 2
+    python -m recorder.retry_failures recordings/run_20251014-180208_airline_claude-sonnet-4-5-20250929/
 
-    python -m recorder.analyze_dialogs.py recordings/run_20251014-213614_airline_gemini-2.5-flash_temp1.0_tr4/tau2_dialogs.jsonl
+    python -m recorder.analyze_dialogs recordings/run_20251014-213614_airline_gemini-2.5-flash_temp1.0_tr4/tau2_dialogs.jsonl
+    python -m recorder.analyze_dialogs recordings/run_20251014-180208_airline_claude-sonnet-4-5-20250929/tau2_dialogs.jsonl
+
+    python -m recorder.retry_failures recordings/run_20251014-234430_airline_gpt-5-mini_temp1.0_tr4/ --max-retries 3 --max-workers 2 --dry-run
+    python -m recorder.retry_failures `ls -t recordings/*${RUN_ID}/tau2_dialogs.jsonl | head -n 1` --max-retries 3 --max-workers 2 --dry-run
+
 """
 
 import argparse

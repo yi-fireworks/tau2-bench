@@ -20,7 +20,8 @@ class RecorderArgs:
     debug: bool
     run_id: Optional[str]
     llm_retries: Optional[int]
-    reasoning_effort: Optional[str]
+    reasoning_effort_agent: str  # Changed: now required with default "low"
+    reasoning_effort_user: str   # New: separate user reasoning effort
     max_steps: int
     max_workers: int
     infra_retries: int
@@ -56,11 +57,18 @@ def add_execution_args(parser: argparse.ArgumentParser):
     parser.add_argument("--llm-retries", type=int, default=None, 
                        help="Override LiteLLM per-call retries")
     parser.add_argument(
-        "--reasoning-effort",
+        "--reasoning-effort-agent",
         type=str,
         choices=["low", "medium", "high"],
-        default=None,
-        help="Hint to the model to adjust reasoning effort (passed through to LiteLLM)",
+        default="low",
+        help="Reasoning effort for the agent model (low/medium/high)",
+    )
+    parser.add_argument(
+        "--reasoning-effort-user",
+        type=str,
+        choices=["low", "medium", "high"],
+        default="low",
+        help="Reasoning effort for the user simulator model (low/medium/high)",
     )
 
 
@@ -102,7 +110,8 @@ def merge_args_with_manifest(
         debug=False,
         run_id=manifest["run_id"],
         llm_retries=None,
-        reasoning_effort=manifest.get("reasoning_effort"),
+        reasoning_effort_agent=manifest.get("reasoning_effort_agent", "low"),
+        reasoning_effort_user=manifest.get("reasoning_effort_user", "low"),
         max_steps=manifest.get("max_steps", 200),
         max_workers=max_workers or manifest.get("max_workers", 6),
         infra_retries=infra_retries or manifest.get("infra_retries", 2),
