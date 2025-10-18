@@ -48,7 +48,7 @@ def add_model_args(parser: argparse.ArgumentParser, allow_user_override: bool = 
 
 def add_execution_args(parser: argparse.ArgumentParser):
     """Add execution configuration arguments to parser."""
-    parser.add_argument("--max-steps", type=int, default=200, 
+    parser.add_argument("--max-steps", type=int, default=100,
                        help="Maximum number of steps per simulation")
     parser.add_argument("--max-workers", type=int, default=6, 
                        help="Maximum number of parallel workers")

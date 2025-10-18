@@ -189,8 +189,8 @@ def _apply_provider_reasoning_effort(
     name = (model or "").lower()
 
     budget_map = {
-        "low": 1000,
-        "medium": 5000,
+        "low": 128,
+        "medium": 512,
         "high": 10000,
     }
 
@@ -267,6 +267,18 @@ def _apply_provider_reasoning_effort(
         kwargs["max_tokens"] = glm_tokens_map.get(reasoning_effort, 128)
         logger.debug(
             f"GLM {model}: enabled thinking, set max_tokens={kwargs['max_tokens']} for effort={reasoning_effort}"
+        )
+
+    # Kimi K2 (served via Fireworks). Follow DeepSeek/GLM caps; no explicit thinking field
+    elif "kimi" in name or "kimi-k2" in name:
+        kimi_tokens_map = {
+            "low": 128,
+            "medium": 512,
+            "high": 2048,
+        }
+        kwargs["max_tokens"] = kimi_tokens_map.get(reasoning_effort, 128)
+        logger.debug(
+            f"Kimi {model}: set max_tokens={kwargs['max_tokens']} for effort={reasoning_effort}"
         )
 
     else:

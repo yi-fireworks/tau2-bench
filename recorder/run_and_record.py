@@ -61,7 +61,8 @@ def parse_args() -> Args:
         num_trials=ns.num_trials,
         model=ns.model,
         temperature=ns.temperature,
-        user_model=ns.user_model or "fireworks_ai/accounts/fireworks/models/glm-4p5-air",
+        #user_model=ns.user_model or "fireworks_ai/accounts/fireworks/models/glm-4p5-air",
+        user_model=ns.user_model or "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b",
         user_temperature=ns.user_temperature if ns.user_temperature is not None else 0.0,
         outdir=Path(ns.outdir),
         seed=ns.seed,
@@ -279,7 +280,7 @@ def main() -> None:
     # Install recorder (monkeypatch LiteLLM)
     install_litellm_recorder(
         RecorderConfig(
-            outdir=args.outdir,
+            outdir=run_dir,
             include_tools=os.environ.get("RECORDER_INCLUDE_TOOLS", "0") == "1",
             strip_think=os.environ.get("RECORDER_STRIP_THINK", "1") == "1",
             debug=args.debug or (os.environ.get("RECORDER_DEBUG", "0") == "1"),
