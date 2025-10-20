@@ -51,13 +51,13 @@ def add_model_args(parser: argparse.ArgumentParser, allow_user_override: bool = 
 def add_execution_args(parser: argparse.ArgumentParser):
     """Add execution configuration arguments to parser."""
     g = parser.add_argument_group("Execution arguments")
-    g.add_argument("--reasoning-effort-agent", type=str, default=None, help="[DEPRECATED] Reasoning effort for agent model; overridden by --budget-agent")
-    g.add_argument("--reasoning-effort-user", type=str, default=None, help="[DEPRECATED] Reasoning effort for user model; overridden by --budget-user")
+    g.add_argument("--reasoning-effort-agent", type=str, default=None, help="Reasoning effort for closed-source models (e.g., gpt-5, claude-4.5). Ignored for open models.")
+    g.add_argument("--reasoning-effort-user", type=str, default=None, help="Reasoning effort for closed-source user simulator models. Ignored for open models.")
     g.add_argument("--llm-retries", type=int, default=None, help="Max retries for LLM calls")
     g.add_argument("--max-steps", type=int, default=50, help="Max steps per simulation")
     g.add_argument("--max-workers", type=int, default=1, help="Maximum number of parallel workers")
-    g.add_argument("--budget-agent", type=int, default=None, help="Token budget for agent model (overrides reasoning effort)")
-    g.add_argument("--budget-user", type=int, default=None, help="Token budget for user model (overrides reasoning effort)")
+    g.add_argument("--budget-agent", type=int, default=None, help="Max tokens for the final answer (closed models) or total output (open models). If not set, provider defaults are used.")
+    g.add_argument("--budget-user", type=int, default=None, help="Max tokens for user simulator. If not set, provider defaults are used.")
 
 
 def merge_args_with_manifest(

@@ -8,7 +8,7 @@ from typing import Tuple, Dict, Any
 
 import requests
 
-from tau2.utils.reasoning_effort import _apply_provider_reasoning_effort
+from tau2.utils.reasoning_effort import reasoning_effort_pre_api_callback
 
 
 TEST_PROMPT = (
@@ -264,7 +264,9 @@ def test_model_reasoning_direct(model: str, reasoning_effort: str, prompt: str =
     print(f"Provider: {provider}")
 
     # Apply our mapping to construct provider-specific kwargs
-    mapped_kwargs = _apply_provider_reasoning_effort(model, {}, reasoning_effort)
+    # We simulate the LiteLLM pre-api callback hook
+    kwargs = {"reasoning_effort": reasoning_effort}
+    mapped_kwargs = reasoning_effort_pre_api_callback(kwargs=kwargs, model_name=model)
 
     # Build request
     payload = build_payload(provider, model, prompt, mapped_kwargs)
@@ -345,13 +347,13 @@ def main() -> None:
     tests = [
         ## possibly working
         #{"model": "gpt-5", "efforts": ["low", "medium"]}, # working
-        #{"model": "gemini/gemini-2.5-pro", "efforts": ["low", "medium"]},
+        {"model": "gemini/gemini-2.5-pro", "efforts": ["low", "medium"]},
         #{"model": "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus", "efforts": ["low", "medium"]},
         #{"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
         #{"model": "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b", "efforts": ["low", "medium"]},
         #{"model": "fireworks_ai/accounts/fireworks/models/kimi-k2-instruct-0905", "efforts": ["low", "medium"]},
-        # {"model": "fireworks_ai/accounts/fireworks/models/qwen3-30b-a3b", "efforts": ["low", "medium"]},
-        {"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
+        #{"model": "fireworks_ai/accounts/fireworks/models/qwen3-30b-a3b", "efforts": ["low", "medium"]},
+        # {"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
 
         # Usage limited but need to test still
         # {"model": "anthropic/claude-sonnet-4-5-20250929", "efforts": ["low", "medium"]}, # not working, but may be just due to usage limits. 

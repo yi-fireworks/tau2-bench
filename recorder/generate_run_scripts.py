@@ -16,12 +16,13 @@ MODELS = [
 
 OUTPUT_DIR = Path("recorder/run_scripts")
 RECORDER_SCRIPT = "./recorder/run_and_record.py"
-BASE_OUTDIR = "recordings/airline-qwen3-235b-user"
+BASE_OUTDIR = "recordings/airline-deepseek-v3p1-terminus-user"
 DOMAIN = "airline"
 TEMPERATURE = 1.0
 NUM_TRIALS = 4
-USER_MODEL = "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b"
+USER_MODEL = "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus"
 MAX_WORKERS = 3
+BUDGET = 16384
 
 # --- Script Template ---
 SCRIPT_TEMPLATE = """#!/bin/bash
@@ -32,19 +33,22 @@ SCRIPT_TEMPLATE = """#!/bin/bash
 export MODEL="{model}"
 export DOMAIN="{domain}"
 export NOW=$(date -u +%Y%m%d-%H%M%S)
-export TEMPERATURE={temperature}
+export TEMPERATURE={temperature} # Agent temperature
 export NUM_TRIALS={num_trials}
 export BASE_MODEL=$(basename "$MODEL")
 export RUN_ID="${{NOW}}_${{DOMAIN}}_${{BASE_MODEL}}_temp${{TEMPERATURE}}_tr${{NUM_TRIALS}}"
 export OUTDIR="{base_outdir}"
+export LOG_DIR="$OUTDIR/logs"
 
 # --- Execution ---
+mkdir -p "$LOG_DIR"
 echo "Activating virtual environment..."
 source ~/venv/bin/activate
 
 echo "Starting run for model: $MODEL"
 echo "RUN_ID: $RUN_ID"
 echo "Output Directory: $OUTDIR"
+echo "Log file: $LOG_DIR/$RUN_ID.log"
 
 python {recorder_script} \\
     --domains "$DOMAIN" \\
@@ -53,11 +57,11 @@ python {recorder_script} \\
     --temperature "$TEMPERATURE" \\
     --user-model "{user_model}" \\
     --user-temperature 0.0 \\
-    --reasoning-effort-agent "medium" \\
-    --reasoning-effort-user "medium" \\
+{reasoning_effort_arg}    --budget-agent {budget} \\
+    --budget-user {budget} \\
     --outdir "$OUTDIR" \\
     --run-id "$RUN_ID" \\
-    --max-workers {max_workers}
+    --max-workers {max_workers} > "$LOG_DIR/$RUN_ID.log" 2>&1
 
 echo "Run for model $MODEL completed."
 """
@@ -76,6 +80,13 @@ def generate_scripts():
         script_name = f"run_{base_model_name}.sh"
         script_path = OUTPUT_DIR / script_name
         
+        # Conditionally add reasoning effort for closed models
+        reasoning_effort_arg = ""
+        closed_model_keywords = ["gpt", "gemini", "claude"]
+        is_closed_model = any(keyword in model.lower() for keyword in closed_model_keywords)
+        if is_closed_model:
+            reasoning_effort_arg = "    --reasoning-effort-agent medium \\\n"
+        
         script_content = SCRIPT_TEMPLATE.format(
             tmux_session_name=f"tau2-gen-{base_model_name}",
             script_path=script_path,
@@ -87,6 +98,8 @@ def generate_scripts():
             recorder_script=RECORDER_SCRIPT,
             user_model=USER_MODEL,
             max_workers=MAX_WORKERS,
+            budget=BUDGET,
+            reasoning_effort_arg=reasoning_effort_arg,
         )
         
         with open(script_path, "w", encoding="utf-8") as f:

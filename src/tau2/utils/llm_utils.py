@@ -68,12 +68,6 @@ else:
     litellm.disable_cache()
 
 
-ALLOW_SONNET_THINKING = False
-
-if not ALLOW_SONNET_THINKING:
-    logger.warning("Sonnet thinking is disabled")
-
-
 def _parse_ft_model_name(model: str) -> str:
     """
     Parse the ft model name from the litellm model name.
@@ -201,9 +195,6 @@ def generate(
     if kwargs.get("num_retries") is None:
         kwargs["num_retries"] = DEFAULT_MAX_RETRIES
 
-    if model.startswith("claude") and not ALLOW_SONNET_THINKING:
-        kwargs["thinking"] = {"type": "disabled"}
-    
     litellm_messages = to_litellm_messages(messages)
     tools = [tool.openai_schema for tool in tools] if tools else None
     if tools and tool_choice is None:
