@@ -148,6 +148,7 @@ def _run_single_trial(
                 llm_agent=args.model,
                 llm_args_agent={
                     "temperature": args.temperature,
+                    # reasoning_effort is overridden by budget_or_max_tokens if provided
                     "reasoning_effort": args.reasoning_effort_agent,
                     "budget_or_max_tokens": args.budget_or_max_tokens_agent,
                     **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),
@@ -155,6 +156,7 @@ def _run_single_trial(
                 llm_user=args.user_model,
                 llm_args_user={
                     "temperature": args.user_temperature,
+                    # reasoning_effort is overridden by budget_or_max_tokens if provided
                     "reasoning_effort": args.reasoning_effort_user,
                     "budget_or_max_tokens": args.budget_or_max_tokens_user,
                     **({"num_retries": args.llm_retries} if args.llm_retries is not None else {}),

@@ -20,13 +20,13 @@ class RecorderArgs:
     debug: bool
     run_id: Optional[str]
     llm_retries: Optional[int]
-    reasoning_effort_agent: Optional[str] = None
-    reasoning_effort_user: Optional[str] = None
+    reasoning_effort_agent: Optional[str] = None  # Deprecated; use budget_or_max_tokens_agent
+    reasoning_effort_user: Optional[str] = None  # Deprecated; use budget_or_max_tokens_user
     budget_or_max_tokens_agent: Optional[int] = None
     budget_or_max_tokens_user: Optional[int] = None
     max_steps: int = 100
     max_workers: int = 1
-    infra_retries: int = 0
+    infra_retries: int = 3
 
 
 def add_model_args(parser: argparse.ArgumentParser, allow_user_override: bool = True):
@@ -50,30 +50,14 @@ def add_model_args(parser: argparse.ArgumentParser, allow_user_override: bool = 
 
 def add_execution_args(parser: argparse.ArgumentParser):
     """Add execution configuration arguments to parser."""
-    parser.add_argument("--max-steps", type=int, default=100,
-                       help="Maximum number of steps per simulation")
-    parser.add_argument("--max-workers", type=int, default=6, 
-                       help="Maximum number of parallel workers")
-    parser.add_argument("--infra-retries", type=int, default=2, 
-                       help="Retries for infrastructure failures")
-    parser.add_argument("--llm-retries", type=int, default=None, 
-                       help="Override LiteLLM per-call retries")
-    parser.add_argument(
-        "--reasoning-effort-agent",
-        type=str,
-        choices=["low", "medium", "high"],
-        default="low",
-        help="Reasoning effort for the agent model (low/medium/high)",
-    )
-    parser.add_argument(
-        "--reasoning-effort-user",
-        type=str,
-        choices=["low", "medium", "high"],
-        default="low",
-        help="Reasoning effort for the user simulator model (low/medium/high)",
-    )
-    parser.add_argument("--budget-agent", type=int, default=None, help="Token budget for agent model")
-    parser.add_argument("--budget-user", type=int, default=None, help="Token budget for user model")
+    g = parser.add_argument_group("Execution arguments")
+    g.add_argument("--reasoning-effort-agent", type=str, default=None, help="[DEPRECATED] Reasoning effort for agent model; overridden by --budget-agent")
+    g.add_argument("--reasoning-effort-user", type=str, default=None, help="[DEPRECATED] Reasoning effort for user model; overridden by --budget-user")
+    g.add_argument("--llm-retries", type=int, default=None, help="Max retries for LLM calls")
+    g.add_argument("--max-steps", type=int, default=50, help="Max steps per simulation")
+    g.add_argument("--max-workers", type=int, default=1, help="Maximum number of parallel workers")
+    g.add_argument("--budget-agent", type=int, default=None, help="Token budget for agent model (overrides reasoning effort)")
+    g.add_argument("--budget-user", type=int, default=None, help="Token budget for user model (overrides reasoning effort)")
 
 
 def merge_args_with_manifest(
