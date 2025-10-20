@@ -58,6 +58,7 @@ def add_execution_args(parser: argparse.ArgumentParser):
     g.add_argument("--max-workers", type=int, default=1, help="Maximum number of parallel workers")
     g.add_argument("--budget-agent", type=int, default=None, help="Max tokens for the final answer (closed models) or total output (open models). If not set, provider defaults are used.")
     g.add_argument("--budget-user", type=int, default=None, help="Max tokens for user simulator. If not set, provider defaults are used.")
+    g.add_argument("--infra-retries", type=int, default=3, help="Max retries for infrastructure failures (e.g., API errors, network issues)")
 
 
 def merge_args_with_manifest(

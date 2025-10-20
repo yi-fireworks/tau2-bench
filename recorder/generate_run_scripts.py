@@ -7,7 +7,6 @@ MODELS = [
     "gemini-2.5-pro",
     "claude-sonnet-4-5-20250929",
     "gpt-5-mini",
-    "fireworks_ai/accounts/fireworks/models/qwen3-30b-a3b",
     "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b",
     "fireworks_ai/accounts/fireworks/models/kimi-k2-instruct-0905",
     "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus",

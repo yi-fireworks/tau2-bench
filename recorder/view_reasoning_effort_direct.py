@@ -346,17 +346,17 @@ def main() -> None:
     # Example configurations mirroring the earlier script, but using our mapping only
     tests = [
         ## possibly working
-        #{"model": "gpt-5", "efforts": ["low", "medium"]}, # working
-        {"model": "gemini/gemini-2.5-pro", "efforts": ["low", "medium"]},
-        #{"model": "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus", "efforts": ["low", "medium"]},
-        #{"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
-        #{"model": "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b", "efforts": ["low", "medium"]},
-        #{"model": "fireworks_ai/accounts/fireworks/models/kimi-k2-instruct-0905", "efforts": ["low", "medium"]},
+        # {"model": "gpt-5", "efforts": ["low", "medium"]}, # working
+        # {"model": "gemini/gemini-2.5-pro", "efforts": ["low", "medium"]},
+        # {"model": "anthropic/claude-sonnet-4-5-20250929", "efforts": ["low", "medium"]},
+        {"model": "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus", "efforts": ["low", "medium"]},
+        {"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
+        {"model": "fireworks_ai/accounts/fireworks/models/kimi-k2-instruct-0905", "efforts": ["low", "medium"]},
+        {"model": "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b", "efforts": ["low", "medium"]},
         #{"model": "fireworks_ai/accounts/fireworks/models/qwen3-30b-a3b", "efforts": ["low", "medium"]},
-        # {"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
 
         # Usage limited but need to test still
-        # {"model": "anthropic/claude-sonnet-4-5-20250929", "efforts": ["low", "medium"]}, # not working, but may be just due to usage limits. 
+        
         # Fireworks model not yet available based on ~/get_fireworks_models_curl (or maybe even if it is there)
         # {"model": "fireworks_ai/accounts/fireworks/models/deepseek-v3p2-exp", "efforts": ["low", "medium"]},
         # 
