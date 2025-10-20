@@ -20,11 +20,13 @@ class RecorderArgs:
     debug: bool
     run_id: Optional[str]
     llm_retries: Optional[int]
-    reasoning_effort_agent: str  # Changed: now required with default "low"
-    reasoning_effort_user: str   # New: separate user reasoning effort
-    max_steps: int
-    max_workers: int
-    infra_retries: int
+    reasoning_effort_agent: Optional[str] = None
+    reasoning_effort_user: Optional[str] = None
+    budget_or_max_tokens_agent: Optional[int] = None
+    budget_or_max_tokens_user: Optional[int] = None
+    max_steps: int = 100
+    max_workers: int = 1
+    infra_retries: int = 0
 
 
 def add_model_args(parser: argparse.ArgumentParser, allow_user_override: bool = True):
@@ -70,6 +72,8 @@ def add_execution_args(parser: argparse.ArgumentParser):
         default="low",
         help="Reasoning effort for the user simulator model (low/medium/high)",
     )
+    parser.add_argument("--budget-agent", type=int, default=None, help="Token budget for agent model")
+    parser.add_argument("--budget-user", type=int, default=None, help="Token budget for user model")
 
 
 def merge_args_with_manifest(

@@ -180,6 +180,7 @@ def install_litellm_recorder(config: Optional[RecorderConfig] = None) -> None:
         temperature = kwargs.get("temperature")
         top_p = kwargs.get("top_p")
         tool_choice = kwargs.get("tool_choice")
+        budget_or_max_tokens = kwargs.get("budget_or_max_tokens")
 
         if not isinstance(messages, list):
             messages = []
@@ -218,9 +219,10 @@ def install_litellm_recorder(config: Optional[RecorderConfig] = None) -> None:
             "tools": tools if config.include_tools else None,
             "temperature": temperature,
             "top_p": top_p,
+            "budget_or_max_tokens": budget_or_max_tokens,
         }
         # Extra params: copy from kwargs excluding known fields
-        exclude_keys = {"model", "messages", "tools", "tool_choice", "temperature", "top_p"}
+        exclude_keys = {"model", "messages", "tools", "tool_choice", "temperature", "top_p", "budget_or_max_tokens"}
         extra_params = {k: v for k, v in kwargs.items() if k not in exclude_keys}
         if extra_params:
             req["extra_params"] = extra_params
