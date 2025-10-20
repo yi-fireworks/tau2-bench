@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import litellm
 from loguru import logger
 
 from recorder.common_args import RecorderArgs as Args, add_model_args, add_execution_args
@@ -28,6 +29,7 @@ from tau2.data_model.simulation import SimulationRun
 from tau2.data_model.tasks import Task
 from tau2.run import EvaluationType, get_tasks, run_task
 from tau2.utils.llm_utils import to_litellm_messages
+from tau2.utils.reasoning_effort import reasoning_effort_pre_api_callback
 from tau2.utils.utils import get_commit_hash
 
 
@@ -283,6 +285,9 @@ def main() -> None:
         retention=None,
     )
     logger.info(f"Error logging enabled to: {error_log}")
+
+    # Register LiteLLM callback to handle reasoning effort and budget
+    litellm.pre_api_callback = [reasoning_effort_pre_api_callback]
 
     # Install recorder (monkeypatch LiteLLM)
     install_litellm_recorder(
