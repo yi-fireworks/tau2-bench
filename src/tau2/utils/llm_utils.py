@@ -72,6 +72,15 @@ if not ALLOW_SONNET_THINKING:
     logger.warning("Sonnet thinking is disabled")
 
 
+REASONING_EFFORT_LOW = "low"
+REASONING_EFFORT_MEDIUM = "medium"
+REASONING_EFFORT_HIGH = "high"
+
+REASONING_TOKENS_LOW = 128
+REASONING_TOKENS_MEDIUM = 512
+REASONING_TOKENS_HIGH = 8192
+
+
 def _parse_ft_model_name(model: str) -> str:
     """
     Parse the ft model name from the litellm model name.
@@ -189,14 +198,14 @@ def _apply_provider_reasoning_effort(
     name = (model or "").lower()
 
     budget_map = {
-        "low": 128,
-        "medium": 512,
-        "high": 10000,
+        REASONING_EFFORT_LOW: REASONING_TOKENS_LOW,
+        REASONING_EFFORT_MEDIUM: REASONING_TOKENS_MEDIUM,
+        REASONING_EFFORT_HIGH: REASONING_TOKENS_HIGH,
     }
 
     if reasoning_effort not in budget_map:
         logger.warning(f"Invalid reasoning_effort '{reasoning_effort}'. Defaulting to 'low'.")
-        reasoning_effort = "low"
+        reasoning_effort = REASONING_EFFORT_LOW
 
     # Never re-enable thinking if explicitly disabled upstream
     if isinstance(kwargs.get("thinking"), dict) and kwargs["thinking"].get("type") == "disabled":
@@ -218,12 +227,8 @@ def _apply_provider_reasoning_effort(
     elif "gemini" in name:
         # Map efforts to Gemini thinkingBudget per docs:
         # low -> 512, medium -> 2048, high -> -1 (dynamic)
-        gemini_budget_map = {
-            "low": 128,
-            "medium": 512,
-            "high": -1,
-        }
-        budget = gemini_budget_map.get(reasoning_effort, 0)
+        budget_map[REASONING_EFFORT_HIGH] = -1
+        budget = budget_map.get(reasoning_effort, 0)
         # Include both to maximize compatibility across SDKs/REST
         kwargs["thinkingConfig"] = {"thinkingBudget": budget}
         if "generationConfig" not in kwargs:
@@ -232,12 +237,7 @@ def _apply_provider_reasoning_effort(
         logger.debug(f"Google {model}: set thinkingBudget={budget}")
     # DeepSeek models (Reasoner and V3 families): follow GLM token caps; no explicit thinking field required
     elif "deepseek" in name:
-        ds_tokens_map = {
-            "low": 128,
-            "medium": 512,
-            "high": 2048,
-        }
-        kwargs["max_tokens"] = ds_tokens_map.get(reasoning_effort, 128)
+        kwargs["max_tokens"] = budget_map.get(reasoning_effort, REASONING_TOKENS_LOW)
         logger.debug(
             f"DeepSeek {model}: set max_tokens={kwargs['max_tokens']} for effort={reasoning_effort}"
         )
@@ -245,38 +245,22 @@ def _apply_provider_reasoning_effort(
     # Qwen series (Qwen3, Qwen-3, Qwen-Plus, etc.)
     elif ("qwen3" in name) or ("qwen-3" in name) or ("qwen-plus" in name) or name.startswith("qwen"):
         # Always enable thinking; map effort to thinking_budget like GLM
-        qwen_budget_map = {
-            "low": 128,
-            "medium": 512,
-            "high": 2048,
-        }
         # kwargs["thinking"] = {"type": "enabled"}  #  no thinking arg. not dict, not float, not bool, not int.
-        kwargs["max_tokens"] = qwen_budget_map.get(reasoning_effort, 128)
+        kwargs["max_tokens"] = budget_map.get(reasoning_effort, REASONING_TOKENS_LOW)
         logger.debug(
             f"Qwen {model}: enabled thinking, set max_tokens={kwargs['max_tokens']} for effort={reasoning_effort}"
         )
 
     # GLM-4.5/4.6 series (includes 'glm-4p6' variants). Map effort to max_tokens and enable thinking.
     elif ("glm-4.6" in name) or ("glm-4.5" in name) or ("glm-4p6" in name) or ("glm-4p5" in name):
-        glm_tokens_map = {
-            "low": 128,
-            "medium": 512,
-            "high": 2048,
-        }
-
-        kwargs["max_tokens"] = glm_tokens_map.get(reasoning_effort, 128)
+        kwargs["max_tokens"] = budget_map.get(reasoning_effort, REASONING_TOKENS_LOW)
         logger.debug(
             f"GLM {model}: enabled thinking, set max_tokens={kwargs['max_tokens']} for effort={reasoning_effort}"
         )
 
     # Kimi K2 (served via Fireworks). Follow DeepSeek/GLM caps; no explicit thinking field
     elif "kimi" in name or "kimi-k2" in name:
-        kimi_tokens_map = {
-            "low": 128,
-            "medium": 512,
-            "high": 2048,
-        }
-        kwargs["max_tokens"] = kimi_tokens_map.get(reasoning_effort, 128)
+        kwargs["max_tokens"] = budget_map.get(reasoning_effort, REASONING_TOKENS_LOW)
         logger.debug(
             f"Kimi {model}: set max_tokens={kwargs['max_tokens']} for effort={reasoning_effort}"
         )
