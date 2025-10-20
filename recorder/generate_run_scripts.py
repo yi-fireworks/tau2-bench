@@ -15,11 +15,11 @@ MODELS = [
 
 OUTPUT_DIR = Path("recorder/run_scripts")
 RECORDER_SCRIPT = "./recorder/run_and_record.py"
-BASE_OUTDIR = "recordings/airline-deepseek-v3p1-terminus-user"
+BASE_OUTDIR = "recordings/airline-gemini-2.5-pro-user"
 DOMAIN = "airline"
 TEMPERATURE = 1.0
 NUM_TRIALS = 4
-USER_MODEL = "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus"
+USER_MODEL = "gemini-2.5-pro"
 MAX_WORKERS = 3
 BUDGET = 16384
 
