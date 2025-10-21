@@ -1,4 +1,4 @@
-# llm_recorder_v1
+# llm_recorder_v1 original design doc
 
 Minimal, transparent recorder for τ² runs using a LiteLLM boundary shim, plus a thin CLI that aggregates per-trial dialogs for fine-tuning export.
 
