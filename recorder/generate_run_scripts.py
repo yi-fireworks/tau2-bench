@@ -68,6 +68,7 @@ echo "Run for model $MODEL completed."
 def generate_scripts():
     """Generates a shell script for each model."""
     OUTPUT_DIR.mkdir(exist_ok=True)
+    tmux_commands = []
     
     for model in MODELS:
         # Sanitize model name for filenames and tmux sessions
@@ -86,8 +87,9 @@ def generate_scripts():
         if is_closed_model:
             reasoning_effort_arg = "    --reasoning-effort-agent medium \\\n"
         
+        tmux_session_name = f"tau2-gen-{base_model_name}"
         script_content = SCRIPT_TEMPLATE.format(
-            tmux_session_name=f"tau2-gen-{base_model_name}",
+            tmux_session_name=tmux_session_name,
             script_path=script_path,
             model=model,
             domain=DOMAIN,
@@ -108,6 +110,19 @@ def generate_scripts():
         os.chmod(script_path, 0o755)
         
         print(f"Generated script: {script_path}")
+        
+        tmux_command = f"tmux new-session -d -s {tmux_session_name} 'bash {script_path}'"
+        tmux_commands.append(tmux_command)
+
+    all_tmux_script_path = OUTPUT_DIR / "run_all_tmux.sh"
+    with open(all_tmux_script_path, "w", encoding="utf-8") as f:
+        f.write("#!/bin/bash\n")
+        f.write("# This script starts a tmux session for each model run.\n\n")
+        f.write("\n".join(tmux_commands))
+        f.write("\n")
+    
+    os.chmod(all_tmux_script_path, 0o755)
+    print(f"\nGenerated script to run all tmux sessions: {all_tmux_script_path}")
 
 if __name__ == "__main__":
     # Change directory to the project root (tau2-bench)

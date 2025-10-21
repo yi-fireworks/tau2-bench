@@ -348,19 +348,21 @@ def main() -> None:
         ## possibly working
         # {"model": "gpt-5", "efforts": ["low", "medium"]}, # working
         # {"model": "gemini/gemini-2.5-pro", "efforts": ["low", "medium"]},
-        # {"model": "anthropic/claude-sonnet-4-5-20250929", "efforts": ["low", "medium"]},
-        {"model": "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus", "efforts": ["low", "medium"]},
-        {"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
-        {"model": "fireworks_ai/accounts/fireworks/models/kimi-k2-instruct-0905", "efforts": ["low", "medium"]},
-        {"model": "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b", "efforts": ["low", "medium"]},
+         {"model": "anthropic/claude-sonnet-4-5-20250929", "efforts": ["low", "medium"]},
+        
+        
+        #{"model": "fireworks_ai/accounts/fireworks/models/deepseek-v3p1-terminus", "efforts": ["low", "medium"]},
+        #{"model": "fireworks_ai/accounts/fireworks/models/glm-4p5", "efforts": ["low", "medium"]},
+        #{"model": "fireworks_ai/accounts/fireworks/models/kimi-k2-instruct-0905", "efforts": ["low", "medium"]},
+        #{"model": "fireworks_ai/accounts/fireworks/models/qwen3-235b-a22b", "efforts": ["low", "medium"]},
         #{"model": "fireworks_ai/accounts/fireworks/models/qwen3-30b-a3b", "efforts": ["low", "medium"]},
 
-        # Usage limited but need to test still
-        
+        # not working
         # Fireworks model not yet available based on ~/get_fireworks_models_curl (or maybe even if it is there)
         # {"model": "fireworks_ai/accounts/fireworks/models/deepseek-v3p2-exp", "efforts": ["low", "medium"]},
-        # 
         # {"model": "fireworks_ai/accounts/fireworks/models/glm-4p5-air", "efforts": ["low", "medium"]},
+        
+        ### {"model": "anthropic/claude-haiku-4-5.20251001-v1.0", "efforts": ["low", "medium"]},
     ]
 
     results = []
