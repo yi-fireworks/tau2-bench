@@ -24,7 +24,7 @@ class RecorderArgs:
     reasoning_effort_user: Optional[str] = None  # Deprecated; use budget_or_max_tokens_user
     budget_or_max_tokens_agent: Optional[int] = None
     budget_or_max_tokens_user: Optional[int] = None
-    max_steps: int = 100
+    max_steps: int = 60
     max_workers: int = 1
     infra_retries: int = 3
 
@@ -54,7 +54,7 @@ def add_execution_args(parser: argparse.ArgumentParser):
     g.add_argument("--reasoning-effort-agent", type=str, default=None, help="Reasoning effort for closed-source models (e.g., gpt-5, claude-4.5). Ignored for open models.")
     g.add_argument("--reasoning-effort-user", type=str, default=None, help="Reasoning effort for closed-source user simulator models. Ignored for open models.")
     g.add_argument("--llm-retries", type=int, default=None, help="Max retries for LLM calls")
-    g.add_argument("--max-steps", type=int, default=50, help="Max steps per simulation")
+    g.add_argument("--max-steps", type=int, default=60, help="Max steps per simulation")
     g.add_argument("--max-workers", type=int, default=1, help="Maximum number of parallel workers")
     g.add_argument("--budget-agent", type=int, default=None, help="Max tokens for the final answer (closed models) or total output (open models). If not set, provider defaults are used.")
     g.add_argument("--budget-user", type=int, default=None, help="Max tokens for user simulator. If not set, provider defaults are used.")
@@ -101,7 +101,7 @@ def merge_args_with_manifest(
         llm_retries=None,
         reasoning_effort_agent=manifest.get("reasoning_effort_agent", "low"),
         reasoning_effort_user=manifest.get("reasoning_effort_user", "low"),
-        max_steps=manifest.get("max_steps", 200),
+        max_steps=manifest.get("max_steps", 60),
         max_workers=max_workers or manifest.get("max_workers", 6),
         infra_retries=infra_retries or manifest.get("infra_retries", 2),
     )
