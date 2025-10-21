@@ -31,15 +31,8 @@ def reasoning_effort_pre_api_callback(kwargs, model_name, **extra_info):
         is_other_closed_model = "gpt-5" in name or "gpt-o" in name or "gpt-4" in name
 
         if is_anthropic_model:
-            # For Anthropic, reasoning_effort sets the thinking budget.
-            budget_map = {
-                "low": ANTHROPIC_BUDGET_LOW,
-                "medium": ANTHROPIC_BUDGET_MEDIUM,
-                "high": ANTHROPIC_BUDGET_HIGH,
-            }
-            budget = budget_map.get(reasoning_effort, ANTHROPIC_BUDGET_MEDIUM)  # Default to medium
-            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
-            logger.debug(f"Anthropic model {model_name}: enabled thinking with budget_tokens={budget} for effort='{reasoning_effort}'")
+            # For Anthropic, reasoning_effort is temporarily disabled to avoid multi-turn conversation issues.
+            logger.debug(f"Anthropic model {model_name}: thinking is disabled.")
         elif is_gemini_model:
             # For Gemini, we map effort to a thinkingBudget.
             budget_map = {

@@ -227,6 +227,16 @@ def install_litellm_recorder(config: Optional[RecorderConfig] = None) -> None:
         if extra_params:
             req["extra_params"] = extra_params
 
+        # Manually run pre-API callbacks because monkeypatching bypasses LiteLLM's internal callback handling
+        if litellm.pre_api_callback:
+            for callback in litellm.pre_api_callback:
+                try:
+                    # The callback might modify kwargs in-place
+                    callback(kwargs=kwargs, model_name=model)
+                except Exception as e:
+                    # Log callback errors but don't crash the main call
+                    print(f"[Recorder][warn] Pre-API callback {getattr(callback, '__name__', 'unknown')} failed: {e}")
+
         # Call real client (normalize tools for stricter backends)
         if tools is not None:
             # Fireworks rejects extra 'name' field - skip normalization for them
