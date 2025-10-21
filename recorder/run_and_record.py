@@ -233,7 +233,7 @@ def _run_single_trial(
                 ),
                 "num_communicate_checks": len(simulation.reward_info.communicate_checks) if simulation.reward_info.communicate_checks else 0,
                 "communicate_success_rate": (
-                    sum(1 for cc in simulation.reward_info.communicate_checks if cc.communicated) / len(simulation.reward_info.communicate_checks)
+                    sum(1 for cc in simulation.reward_info.communicate_checks if cc.met) / len(simulation.reward_info.communicate_checks)
                     if simulation.reward_info.communicate_checks else None
                 ),
                 
